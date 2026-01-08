@@ -2,7 +2,7 @@
 set -e
 
 ### CONFIG ###
-ISO_URL="https://archive.org/download/vultr-update-0907/Windows_Server_2019.iso"
+ISO_URL="https://go.microsoft.com/fwlink/p/?LinkID=2195443&clcid=0x409&culture=en-us&country=US"
 ISO_FILE="win11-gamer.iso"
 
 DISK_FILE="win11.qcow2"
