@@ -25,6 +25,56 @@ command -v qemu-system-x86_64 >/dev/null || { echo "❌ no qemu"; exit 1; }
 ### DISK ###
 [ -f "${DISK_FILE}" ] || qemu-img create -f qcow2 "${DISK_FILE}" "${DISK_SIZE}"
 
+# ===== [PHẦN THÊM MỚI: TẠO FILE TỰ ĐỘNG CÀI ĐẶT] =====
+echo "[+] Đang chuẩn bị cấu hình tự động cài đặt..."
+mkdir -p config_dir
+cat > config_dir/autounattend.xml <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+    <settings pass="windowsPE">
+        <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+            <DiskConfiguration>
+                <Disk wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+                    <CreatePartitions>
+                        <CreatePartition wcm:action="add">
+                            <Order>1</Order>
+                            <Type>Primary</Type>
+                            <Extend>true</Extend>
+                        </CreatePartition>
+                    </CreatePartitions>
+                    <ModifyPartitions>
+                        <ModifyPartition wcm:action="add">
+                            <Format>NTFS</Format>
+                            <Label>Windows</Label>
+                            <Letter>C</Letter>
+                            <Order>1</Order>
+                            <PartitionID>1</PartitionID>
+                        </ModifyPartition>
+                    </ModifyPartitions>
+                    <DiskID>0</DiskID>
+                    <WillWipeDisk>true</WillWipeDisk>
+                </Disk>
+            </DiskConfiguration>
+            <UserData>
+                <AcceptEula>true</AcceptEula>
+            </UserData>
+            <ImageInstall>
+                <OSImage>
+                    <InstallTo>
+                        <DiskID>0</DiskID>
+                        <PartitionID>1</PartitionID>
+                    </InstallTo>
+                </OSImage>
+            </ImageInstall>
+        </component>
+    </settings>
+</unattend>
+EOF
+
+# Tạo một file image chứa cấu hình (dùng định dạng FAT để Windows dễ đọc)
+# Nếu máy chưa có mtools, script sẽ cố gắng chạy bằng cách gắn thư mục trực tiếp
+# =====================================================
+
 echo "🚀 Windows 11 KVM BIOS + SCSI (LSI)"
 echo "🖥️  VNC : localhost:5900"
 echo "🖧  RDP : localhost:3389"
@@ -74,17 +124,19 @@ echo "Cong tcp 3389 (RDP) : $RDP_ADDR"
 qemu-system-x86_64 \
   -enable-kvm \
   -cpu host \
-  -smp 8 \
-  -m 16G \
+  -smp 4 \
+  -m 8G \
   -machine q35 \
-  -drive file=/win11.qcow2,if=ide,format=qcow2 \
-  -cdrom /win11-gamer.iso \
+  -drive file=win11.qcow2,if=ide,format=qcow2 \
+  -drive file=win11-gamer.iso,index=1,media=cdrom \
+  -drive file=fat:rw:config_dir,index=2,format=raw \
   -boot order=d \
   -netdev user,id=net0,hostfwd=tcp::3389-:3389 \
   -vnc :0 \
-  -usb -device usb-tablet &
+  -usb -device usb-tablet \
+  -no-reboot &
 
-cd /home/user/windows-idx/
+cd /home/user/windows-idx/ 2>/dev/null || mkdir -p /home/user/windows-idx/ && cd /home/user/windows-idx/
 while true
 do
     # 1. Tạo file locnguyen.txt với nội dung yêu cầu
