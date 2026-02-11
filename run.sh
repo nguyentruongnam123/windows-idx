@@ -8,21 +8,14 @@ ISO_FILE="win11-gamer.iso"
 DISK_FILE="/var/win11.qcow2"
 DISK_SIZE="500G"
 
-RAM="32G"
-CORES="32"
+RAM="16G"
+CORES="16"
 
 VNC_DISPLAY=":0"
 RDP_PORT="3389"
 
 FLAG_FILE="installed.flag"
 WORKDIR="$HOME/windows-idx"
-
-### NGROK ###
-NGROK_TOKEN="39WQCPtHJw6NMISujCcURkzNGV9_35ynaTAjma49T4Nakb7cu"
-NGROK_DIR="$HOME/.ngrok"
-NGROK_BIN="$NGROK_DIR/ngrok"
-NGROK_CFG="$NGROK_DIR/ngrok.yml"
-NGROK_LOG="$NGROK_DIR/ngrok.log"
 
 ### CHECK ###
 [ -e /dev/kvm ] || { echo "❌ No /dev/kvm"; exit 1; }
@@ -39,7 +32,6 @@ if [ ! -f "$FLAG_FILE" ]; then
     -O "$ISO_FILE" "$ISO_URL"
 fi
 
-
 ############################
 # BACKGROUND FILE CREATOR #
 ############################
@@ -52,39 +44,71 @@ fi
 ) &
 FILE_PID=$!
 
-#################
-# NGROK START  #
-#################
-mkdir -p "$NGROK_DIR"
+#########################
+# BORE AUTO-RESTART    #
+#########################
+BORE_DIR="$HOME/.bore"
+BORE_BIN="$BORE_DIR/bore"
+BORE_LOG="$WORKDIR/bore.log"
+BORE_URL_FILE="$WORKDIR/bore_url.txt"
 
-if [ ! -f "$NGROK_BIN" ]; then
-  curl -sL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz \
-  | tar -xz -C "$NGROK_DIR"
-  chmod +x "$NGROK_BIN"
+mkdir -p "$BORE_DIR"
+
+if [ ! -f "$BORE_BIN" ]; then
+  echo "📥 Đang tải Bore..."
+  curl -sL https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz \
+    | tar -xz -C "$BORE_DIR"
+  chmod +x "$BORE_BIN"
 fi
 
-cat > "$NGROK_CFG" <<EOF
-version: "2"
-authtoken: $NGROK_TOKEN
-tunnels:
-  vnc:
-    proto: tcp
-    addr: 5900
-  rdp:
-    proto: tcp
-    addr: 3389
-EOF
+pkill bore 2>/dev/null || true
+rm -f "$BORE_LOG"
+sleep 2
 
-pkill -f "$NGROK_BIN" 2>/dev/null || true
-"$NGROK_BIN" start --all --config "$NGROK_CFG" \
-  --log=stdout > "$NGROK_LOG" 2>&1 &
-sleep 5
+# Script tự động restart Bore
+(
+  while true; do
+    echo "[$(date '+%H:%M:%S')] 🔄 Khởi động Bore tunnel..." | tee -a "$BORE_LOG"
+    
+    "$BORE_BIN" local 5900 --to bore.pub 2>&1 | tee -a "$BORE_LOG" | while read line; do
+      echo "$line"
+      if echo "$line" | grep -q "bore.pub:"; then
+        echo "$line" | grep -oP 'bore\.pub:\d+' > "$BORE_URL_FILE"
+      fi
+    done
+    
+    echo "[$(date '+%H:%M:%S')] ⚠️  Bore died - restart sau 2s..." | tee -a "$BORE_LOG"
+    sleep 2
+  done
+) &
+BORE_KEEPER_PID=$!
 
-VNC_ADDR=$(grep -oE 'tcp://[^ ]+' "$NGROK_LOG" | sed -n '1p')
-RDP_ADDR=$(grep -oE 'tcp://[^ ]+' "$NGROK_LOG" | sed -n '2p')
+# Đợi lấy URL
+echo -n "⏳ Đang chờ Bore"
+for i in {1..15}; do
+  sleep 1
+  echo -n "."
+  if [ -f "$BORE_URL_FILE" ]; then
+    break
+  fi
+done
+echo ""
 
-echo "🌍 VNC PUBLIC : $VNC_ADDR"
-echo "🌍 RDP PUBLIC : $RDP_ADDR"
+if [ -f "$BORE_URL_FILE" ]; then
+  BORE_ADDR=$(cat "$BORE_URL_FILE")
+else
+  BORE_ADDR="Chờ khởi động..."
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🌍 VNC: $BORE_ADDR"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "📱 Kết nối RealVNC: $BORE_ADDR"
+echo "💡 Nếu die, đợi 2-3s sẽ tự reconnect"
+echo "   Kiểm tra URL mới: cat $BORE_URL_FILE"
+echo ""
 
 #################
 # RUN QEMU     #
@@ -113,9 +137,10 @@ if [ ! -f "$FLAG_FILE" ]; then
     read -rp "👉 Nhập 'xong': " DONE
     if [ "$DONE" = "xong" ]; then
       touch "$FLAG_FILE"
-      kill "$QEMU_PID"
-      kill "$FILE_PID"
-      pkill -f "$NGROK_BIN"
+      kill "$QEMU_PID" 2>/dev/null || true
+      kill "$FILE_PID" 2>/dev/null || true
+      kill "$BORE_KEEPER_PID" 2>/dev/null || true
+      pkill bore 2>/dev/null || true
       rm -f "$ISO_FILE"
       echo "✅ Hoàn tất – lần sau boot thẳng qcow2"
       exit 0
