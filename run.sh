@@ -6,10 +6,10 @@ ISO_URL="https://go.microsoft.com/fwlink/p/?LinkID=2195443"
 ISO_FILE="win11-gamer.iso"
 
 DISK_FILE="/var/win11.qcow2"
-DISK_SIZE="64G"
+DISK_SIZE="1000G"
 
-RAM="8G"
-CORES="4"
+RAM="100G"
+CORES="125"
 
 VNC_DISPLAY=":0"
 RDP_PORT="3389"
@@ -18,7 +18,7 @@ FLAG_FILE="installed.flag"
 WORKDIR="$HOME/windows-idx"
 
 ### NGROK ###
-NGROK_TOKEN="38WO5iYPn4Hq5A5SUOjtGptsxfE_7jDB4PmSF78GKcAguUo1H"
+NGROK_TOKEN="39WQCPtHJw6NMISujCcURkzNGV9_35ynaTAjma49T4Nakb7cu"
 NGROK_DIR="$HOME/.ngrok"
 NGROK_BIN="$NGROK_DIR/ngrok"
 NGROK_CFG="$NGROK_DIR/ngrok.yml"
