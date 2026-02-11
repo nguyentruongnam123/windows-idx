@@ -6,10 +6,10 @@ ISO_URL="https://go.microsoft.com/fwlink/p/?LinkID=2195443"
 ISO_FILE="win11-gamer.iso"
 
 DISK_FILE="/var/win11.qcow2"
-DISK_SIZE="1000G"
+DISK_SIZE="500G"
 
-RAM="100G"
-CORES="125"
+RAM="32G"
+CORES="32"
 
 VNC_DISPLAY=":0"
 RDP_PORT="3389"
