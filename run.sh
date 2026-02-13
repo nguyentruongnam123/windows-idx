@@ -8,8 +8,8 @@ ISO_FILE="ubuntu24.iso"
 DISK_FILE="/var/ubuntu.qcow2"
 DISK_SIZE="100G"
 
-RAM="4G"
-CORES="4"
+RAM="8G"
+CORES="8"
 
 VNC_DISPLAY=":0"
 
