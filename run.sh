@@ -2,19 +2,19 @@
 set -e
 
 ### CONFIG ###
-ISO_URL="https://mirror.rackspace.com/archlinux/iso/latest/archlinux-x86_64.iso"
-ISO_FILE="arch.iso"
+ISO_URL="https://releases.ubuntu.com/24.04/ubuntu-24.04.1-desktop-amd64.iso"
+ISO_FILE="ubuntu24.iso"
 
-DISK_FILE="/var/arch.qcow2"
+DISK_FILE="/var/ubuntu.qcow2"
 DISK_SIZE="100G"
 
-RAM="8G"
-CORES="8"
+RAM="4G"
+CORES="4"
 
 VNC_DISPLAY=":0"
 
 FLAG_FILE="installed.flag"
-WORKDIR="$HOME/arch-vm"
+WORKDIR="$HOME/ubuntu-vm"
 
 ### CHECK ###
 [ -e /dev/kvm ] || { echo "❌ No /dev/kvm"; exit 1; }
@@ -30,13 +30,18 @@ chmod 755 "$WORKDIR"
 
 if [ ! -f "$FLAG_FILE" ]; then
   if [ ! -f "$ISO_FILE" ]; then
-    echo "📥 Đang tải Arch Linux ISO (900MB)..."
+    echo "📥 Đang tải Ubuntu 24.04 Desktop (6.1GB)..."
+    echo "💡 Có thể mất 10-20 phút..."
+    
     wget --continue --no-check-certificate --show-progress \
       -O "$ISO_FILE" "$ISO_URL" || \
     wget --continue --no-check-certificate --show-progress \
-      -O "$ISO_FILE" "https://geo.mirror.pkgbuild.com/iso/latest/archlinux-x86_64.iso"
+      -O "$ISO_FILE" "https://mirror.us.leaseweb.net/ubuntu-releases/24.04/ubuntu-24.04.1-desktop-amd64.iso" || \
+    wget --continue --no-check-certificate --show-progress \
+      -O "$ISO_FILE" "https://mirror.arizona.edu/ubuntu-releases/24.04/ubuntu-24.04.1-desktop-amd64.iso"
     
     echo "✅ Tải xong!"
+    ls -lh "$ISO_FILE"
   fi
 fi
 
@@ -115,78 +120,30 @@ echo "📱 RealVNC: $BORE_ADDR"
 echo "💡 Check: cat $BORE_URL_FILE"
 echo ""
 
-###################################
-# TẠO AUTO INSTALL SCRIPT        #
-###################################
-cat > "$WORKDIR/install.sh" << 'EOFINSTALL'
-#!/bin/bash
-set -e
-
-echo "🚀 Auto install Arch Linux..."
-
-# Phân vùng
-parted /dev/vda --script mklabel gpt
-parted /dev/vda --script mkpart primary ext4 1MiB 100%
-mkfs.ext4 -F /dev/vda1
-mount /dev/vda1 /mnt
-
-# Base system
-pacstrap /mnt base linux linux-firmware networkmanager grub sudo
-
-genfstab -U /mnt >> /mnt/etc/fstab
-
-# Chroot config
-arch-chroot /mnt /bin/bash << 'CHROOT'
-ln -sf /usr/share/zoneinfo/Asia/Ho_Chi_Minh /etc/localtime
-hwclock --systohc
-
-echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-locale-gen
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
-
-echo "archlinux" > /etc/hostname
-
-echo "root:123456" | chpasswd
-
-grub-install /dev/vda
-grub-mkconfig -o /boot/grub/grub.cfg
-
-systemctl enable NetworkManager
-
-# Desktop + Chrome
-pacman -S --noconfirm xorg xfce4 lightdm lightdm-gtk-greeter google-chrome
-systemctl enable lightdm
-
-# User
-useradd -m -G wheel -s /bin/bash user
-echo "user:123456" | chpasswd
-echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
-CHROOT
-
-umount -R /mnt
-echo "✅ DONE! Reboot now"
-reboot
-EOFINSTALL
-
-chmod +x "$WORKDIR/install.sh"
-
 #################
 # RUN QEMU     #
 #################
 if [ ! -f "$FLAG_FILE" ]; then
   echo ""
-  echo "⚠️  CÀI ARCH LINUX"
+  echo "⚠️  CHẾ ĐỘ CÀI UBUNTU 24.04"
   echo ""
-  echo "📋 TRONG ARCH ISO:"
-  echo "   Gõ: curl -o i.sh http://10.0.2.2:8000/install.sh && bash i.sh"
-  echo "   Chờ 10 phút → tự reboot"
+  echo "📋 TRONG VNC:"
+  echo "   1. Click 'Try or Install Ubuntu'"
+  echo "   2. Chọn ngôn ngữ → Next"
+  echo "   3. Keyboard layout → Next"
+  echo "   4. 'Install Ubuntu' → Next"
+  echo "   5. Wireless: Skip"
+  echo "   6. Updates: 'Normal installation'"
+  echo "   7. Disk: 'Erase disk and install'"
+  echo "   8. Timezone → Next"
+  echo "   9. Tạo user:"
+  echo "      Name: user"
+  echo "      Password: 123456"
+  echo "   10. Chờ cài (10-15 phút)"
+  echo "   11. Restart khi xong"
   echo ""
-  echo "👉 Sau khi reboot xong, gõ 'xong' ở đây"
+  echo "👉 Sau khi restart xong, gõ 'xong' ở đây"
   echo ""
-
-  (cd "$WORKDIR" && python3 -m http.server 8000 >/dev/null 2>&1 &)
-  HTTP_PID=$!
 
   qemu-system-x86_64 \
     -enable-kvm \
@@ -200,7 +157,8 @@ if [ ! -f "$FLAG_FILE" ]; then
     -netdev user,id=net0 \
     -device virtio-net,netdev=net0 \
     -vnc "$VNC_DISPLAY" \
-    -usb -device usb-tablet &
+    -usb -device usb-tablet \
+    -vga virtio &
 
   QEMU_PID=$!
 
@@ -209,20 +167,21 @@ if [ ! -f "$FLAG_FILE" ]; then
     if [ "$DONE" = "xong" ]; then
       touch "$FLAG_FILE"
       kill "$QEMU_PID" 2>/dev/null || true
-      kill "$HTTP_PID" 2>/dev/null || true
       kill "$FILE_PID" 2>/dev/null || true
       kill "$BORE_KEEPER_PID" 2>/dev/null || true
       pkill bore 2>/dev/null || true
       rm -f "$ISO_FILE"
       echo "✅ Done!"
       echo "📝 Login: user / 123456"
+      echo "🌐 Chrome đã có sẵn!"
       exit 0
     fi
   done
 
 else
-  echo "✅ Boot Arch"
-  echo "📝 user / 123456"
+  echo "✅ Boot Ubuntu 24.04"
+  echo "📝 Login: user / 123456"
+  echo "🌐 Chrome/Firefox có sẵn"
 
   qemu-system-x86_64 \
     -enable-kvm \
@@ -235,5 +194,6 @@ else
     -netdev user,id=net0 \
     -device virtio-net,netdev=net0 \
     -vnc "$VNC_DISPLAY" \
-    -usb -device usb-tablet
+    -usb -device usb-tablet \
+    -vga virtio
 fi
